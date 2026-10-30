@@ -21,7 +21,7 @@ function buildSlides(s) {
   const add = (scene, html) => slides.push({ scene, html });
   if (s.stage === 'setup') {
     const intro = s.settings.registrationOpen ? 'ההרשמה פתוחה! סרקו כדי להירשם' : 'ההרשמה נסגרה, ההגרלה בקרוב';
-    add('wait', `<div class="lobby"><h2>${esc(s.settings.name)}</h2><p>${intro}</p><div class="big-qr">${qrSvg()}</div><p class="count">נרשמו ${s.signupCount ?? 0} משתתפים</p></div>`);
+    add('wait', `<div class="lobby"><h2>${esc(s.settings.name)}</h2><p>${intro}</p><div class="big-qr">${qrSvg()}</div><p class="count">אושרו ${s.signupCount ?? 0} משתתפים</p></div>`);
     add('rules', rulesSlide(s));
     return slides;
   }

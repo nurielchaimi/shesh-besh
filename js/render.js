@@ -11,6 +11,13 @@ export const tablesLabel = (g) => {
   return g.tables.length === 1 ? `שולחן ${g.tables[0]}` : `שולחנות ${g.tables[0]}–${g.tables.at(-1)}`;
 };
 
+// A small disc in the colour a player has in this match.
+export const colorDot = (s, m, id) => {
+  if (!m.a || !m.b) return '';
+  const c = E.colorOf(s, m, id);
+  return `<i class="chk" style="background:${esc(c.hex)}" title="${esc(c.name)}"></i>`;
+};
+
 export function resultTag(r) {
   if (!r || r.bye) return '';
   if (r.walkover) return '<span class="tag">טכני</span>';
@@ -26,7 +33,7 @@ export function matchCardHtml(s, m, { me = null } = {}) {
   const side = (id) => {
     if (id == null) return '<div class="side bye"><span class="nm">פטור</span></div>';
     const cls = !r ? '' : r.winner === id ? 'win' : 'lose';
-    return `<div class="side ${cls}${id === me ? ' me' : ''}"><span class="nm">${nm(s, id)}</span>${r?.winner === id ? resultTag(r) : ''}</div>`;
+    return `<div class="side ${cls}${id === me ? ' me' : ''}"><span class="nm">${colorDot(s, m, id)}${nm(s, id)}</span>${r?.winner === id ? resultTag(r) : ''}</div>`;
   };
   return `<div class="match${r ? ' done' : ''}"><div class="tbl"><small>שולחן</small><b>${m.table ?? '—'}</b></div><div class="sides">${side(m.a)}${side(m.b)}<div class="cap">${esc(caption(s, m))}</div></div></div>`;
 }

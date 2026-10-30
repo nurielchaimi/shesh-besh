@@ -240,6 +240,32 @@ test('byes go to the top seeds', () => {
   assert.ok(E.champion(done));
 });
 
+test('only approved signups reach the draw', () => {
+  const signups = [
+    { id: 'a', name: 'א', status: 'approved' },
+    { id: 'b', name: 'ב', status: 'pending' },
+    { id: 'c', name: 'ג', status: 'rejected' },
+    { id: 'd', name: 'ד' }, // from before approvals existed
+  ];
+  assert.deepEqual(E.approvedSignups(signups).map((x) => x.id), ['a', 'd']);
+  assert.deepEqual(Object.keys(E.playersFromSignups(signups)), ['a', 'd']);
+});
+
+test('every match splits the colours and groups stay balanced', () => {
+  const s = setup(24, { groupSize: 4 }, 9);
+  const tally = {};
+  for (const m of Object.values(s.matches)) {
+    assert.ok([m.a, m.b].includes(m.c1));
+    const other = m.c1 === m.a ? m.b : m.a;
+    (tally[m.c1] ??= { c1: 0, c2: 0 }).c1++;
+    (tally[other] ??= { c1: 0, c2: 0 }).c2++;
+    assert.notEqual(E.colorOf(s, m, m.a).name, E.colorOf(s, m, m.b).name);
+  }
+  for (const t of Object.values(tally)) assert.ok(Math.abs(t.c1 - t.c2) <= 1, `unbalanced: ${t.c1} vs ${t.c2}`);
+  const done = playAll(s, E.seededRng(9));
+  for (const m of Object.values(done.matches).filter((x) => x.stage === 'ko' && x.a && x.b)) assert.ok([m.a, m.b].includes(m.c1));
+});
+
 test('diffPatch never emits overlapping paths', () => {
   const a = { x: { y: 1, z: { k: 1 } }, arr: [1], gone: 1 };
   const b = { x: { y: 2, z: { k: 1 }, w: { n: 1 } }, arr: [1, 2] };

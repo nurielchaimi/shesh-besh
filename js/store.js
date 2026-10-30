@@ -91,7 +91,7 @@ function localStore() {
         const data = pickProfile(profile);
         if (data.name.length < 2) throw new Error('צריך להזין שם');
         const id = newId();
-        signups[id] = { id, ...data, uid: device, createdAt: Date.now() };
+        signups[id] = { id, ...data, uid: device, status: 'pending', createdAt: Date.now() };
         commit();
         return id;
       },
@@ -108,12 +108,16 @@ function localStore() {
       async add(profile) {
         const data = pickProfile(profile);
         const id = newId();
-        signups[id] = { id, ...data, uid: null, createdAt: Date.now() };
+        signups[id] = { id, ...data, uid: null, status: 'approved', createdAt: Date.now() };
         commit();
         return id;
       },
       async set(id, data) {
         signups[id] = { ...data, id };
+        commit();
+      },
+      async setStatus(id, status) {
+        if (signups[id]) signups[id].status = status;
         commit();
       },
       async remove(id) {
@@ -232,7 +236,7 @@ async function firebaseStore(cfg) {
         const data = pickProfile(profile);
         if (data.name.length < 2) throw new Error('צריך להזין שם');
         const ref = fs.doc(col('signups'));
-        await fs.setDoc(ref, { ...data, uid: await identity(), createdAt: Date.now() });
+        await fs.setDoc(ref, { ...data, uid: await identity(), status: 'pending', createdAt: Date.now() });
         return ref.id;
       },
       async claim(id) {
@@ -245,10 +249,11 @@ async function firebaseStore(cfg) {
       },
       async add(profile) {
         const ref = fs.doc(col('signups'));
-        await fs.setDoc(ref, { ...pickProfile(profile), uid: null, createdAt: Date.now() });
+        await fs.setDoc(ref, { ...pickProfile(profile), uid: null, status: 'approved', createdAt: Date.now() });
         return ref.id;
       },
       set: (id, data) => fs.setDoc(fs.doc(db, 'signups', id), data),
+      setStatus: (id, status) => fs.updateDoc(fs.doc(db, 'signups', id), { status }),
       remove: (id) => fs.deleteDoc(fs.doc(db, 'signups', id)),
       release: (id) => fs.updateDoc(fs.doc(db, 'signups', id), { uid: null }),
     },

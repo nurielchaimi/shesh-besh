@@ -16,6 +16,8 @@ const cockedDie = `<div class="callout"><span class="die">🎲</span><div><b>ק�
 
 export function rulesHtml(s, { compact = false } = {}) {
   const { advance } = s.settings;
+  const c1 = s.settings.color1Name ?? 'לבן';
+  const c2 = s.settings.color2Name ?? 'שחור';
 
   if (compact) {
     return `<div class="rules-tv">
@@ -30,6 +32,7 @@ export function rulesHtml(s, { compact = false } = {}) {
     <div class="card"><h3>המטרה</h3><p style="margin:6px 0 0">להוציא את כל 15 הדמקות שלך מהלוח לפני היריב.</p></div>
 
     <div class="card"><h3>איך משחקים</h3><ul>
+      <li><b>הצבע שלך:</b> האתר קובע בכל משחק מי משחק ב${c1} ומי ב${c2}, ומחלק את זה הוגן לאורך הטורניר. הצבע מופיע בדף שלך, ליד השולחן והיריב.</li>
       <li>מי שמתחיל נקבע בהטלה של קובייה אחת לכל שחקן. הגבוה פותח, ומשחק את שתי הקוביות שיצאו.</li>
       <li>בכל תור מטילים שתי קוביות ומתקדמים לפי המספרים: דמקה אחת בשתי הקוביות, או שתי דמקות, כל אחת לפי קובייה.</li>
       <li>דאבל (שתי קוביות זהות): משחקים את המספר ארבע פעמים.</li>

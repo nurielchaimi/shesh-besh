@@ -214,6 +214,9 @@ body.tv { height: 100vh; overflow: hidden; display: flex; flex-direction: column
 .report .btn.lose { border-color: var(--bad); }
 .report .span2 { grid-column: 1 / -1; }
 .regform .btn { width: 100%; }
+.chk { display: inline-block; flex: none; width: .85em; height: .85em; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--ink) 45%, transparent); vertical-align: -.1em; margin-inline-end: .4em; }
+.chk.lg { width: 1.25em; height: 1.25em; border-color: rgba(255, 255, 255, .6); vertical-align: -.25em; margin-inline: 0 .5em; }
+.mycolor { margin-top: 10px; font-size: 1.15rem; text-align: center; }
 
 /* ---------- rules ---------- */
 .rules .card ul, .rules .card ol { margin: 8px 0 0; padding-inline-start: 1.3em; }

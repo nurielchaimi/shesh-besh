@@ -43,6 +43,10 @@ const meId = () => impersonate ?? mySignup?.id ?? null;
 const oppOf = (m, me) => (m.a === me ? m.b : m.a);
 const tableList = (ms) => [...new Set(ms.map((m) => m.table).filter((t) => t != null))].sort((a, b) => a - b).join(', ');
 const roundsOf = (gid) => Math.max(0, ...Object.values(state.matches).filter((m) => m.stage === 'group' && m.group === gid).map((m) => m.round));
+const colorLine = (s, m, me) => {
+  const c = E.colorOf(s, m, me);
+  return `<div class="mycolor"><i class="chk lg" style="background:${esc(c.hex)}"></i> הצבע שלך: <b>${esc(c.name)}</b></div>`;
+};
 const messageHtml = () => (message ? `<div class="note bad">${esc(message)}</div>` : '');
 
 // ---------- registration ----------
@@ -67,7 +71,7 @@ function pickerHtml(q) {
 function anonymousView(s, q) {
   const open = s.stage === 'setup' && s.settings.registrationOpen;
   if (open && !showPicker) {
-    return `${messageHtml()}<div class="card"><h2>הרשמה לטורניר</h2><p class="muted">אחרי ההגרלה נשלח לכאן, בכל משחק, מול מי משחקים ובאיזה שולחן. השאר/י את הדף פתוח.</p>${regFormHtml()}<button class="btn ghost" data-tab="rules" style="width:100%;margin-top:8px">קראו קודם את חוקי הטורניר</button></div>
+    return `${messageHtml()}<div class="card"><h2>הרשמה לטורניר</h2><p class="muted">ההרשמה כפופה לאישור המארגנים. אחרי האישור וההגרלה נשלח לכאן, בכל משחק, מול מי משחקים ובאיזה שולחן. השאר/י את הדף פתוח.</p>${regFormHtml()}<button class="btn ghost" data-tab="rules" style="width:100%;margin-top:8px">קראו קודם את חוקי הטורניר</button></div>
       <div class="card"><p class="muted" style="margin:0 0 8px">המארגנים כבר רשמו אותך?</p><button class="btn" data-act="picker">כן, חפש את השם שלי</button></div>`;
   }
   const title = open ? 'חיפוש השם שלך' : s.stage === 'setup' ? 'ההרשמה נסגרה' : 'הטורניר כבר התחיל';
@@ -77,11 +81,18 @@ function anonymousView(s, q) {
 function lobbyView(s) {
   const me = mySignup ?? s.players[meId()] ?? {};
   const level = E.LEVELS[me.level];
+  const status = E.signupStatus(me);
+  const title = { pending: 'ההרשמה התקבלה ⏳', approved: 'אושרת! ✓', rejected: 'ההרשמה לא אושרה' }[status];
+  const blurb = {
+    pending: 'המארגנים צריכים לאשר אותך לפני שתיכנס/י להגרלה. ברגע שתאושר/י תופיע כאן הודעה. <b>השאר/י את הדף פתוח.</b>',
+    approved: 'ההגרלה עוד לא התקיימה. ברגע שהיא מתקיימת תופיע כאן הקבוצה שלך, היריב הראשון ומספר השולחן. <b>השאר/י את הדף פתוח.</b>',
+    rejected: 'ההרשמה שלך לא אושרה להשתתפות בטורניר. אם זו טעות, פנה/י למארגנים.',
+  }[status];
   if (editing && mySignup) return `${messageHtml()}<div class="card"><h2>עריכת הפרטים שלי</h2>${regFormHtml(me, 'editForm', 'שמירה')}<button class="btn ghost" data-act="cancelEdit" style="margin-top:8px">ביטול</button></div>`;
-  return `${messageHtml()}<div class="card me-card"><h2>נרשמת בהצלחה ✓</h2>
+  return `${messageHtml()}<div class="card me-card"><h2>${title}</h2>
     <div class="profile"><h3>${esc(me.name)}</h3><div class="chips">${level ? `<span class="tag">${esc(level)}</span>` : ''}${me.study ? `<span class="tag">${esc(me.study)}</span>` : ''}</div>${me.bio ? `<q>${esc(me.bio)}</q>` : ''}</div>
-    <p>ההגרלה עוד לא התקיימה. ברגע שהיא מתקיימת תופיע כאן הקבוצה שלך, היריב הראשון ומספר השולחן. <b>השאר/י את הדף פתוח.</b></p>
-    ${mySignup ? '<button class="btn" data-act="edit">עריכת פרטים</button>' : ''}</div>`;
+    <p>${blurb}</p>
+    ${mySignup && status !== 'rejected' ? '<button class="btn" data-act="edit">עריכת פרטים</button>' : ''}</div>`;
 }
 
 // ---------- the player's flow ----------
@@ -122,7 +133,7 @@ function waitHtml(s, flow) {
     const opp = oppOf(flow.next, me);
     const live = flow.waitingFor.map((m) => `שולחן ${m.table}: ${nm(s, m.a)} נגד ${nm(s, m.b)}`).join(' · ');
     const resting = flow.waitingFor.every((m) => m.a !== me && m.b !== me);
-    return `<div class="big"><small>${resting ? 'בסיבוב הזה את/ה נח/ה. המשחק הבא שלך' : 'המשחק הבא שלך'}</small><div class="t">שולחן ${flow.next.table}</div><div class="vs">מול ${nm(s, opp)}</div></div>
+    return `<div class="big"><small>${resting ? 'בסיבוב הזה את/ה נח/ה. המשחק הבא שלך' : 'המשחק הבא שלך'}</small><div class="t">שולחן ${flow.next.table}</div><div class="vs">מול ${nm(s, opp)}</div>${colorLine(s, flow.next, me)}</div>
       ${profileCardHtml(s, opp, { title: 'היריב/ה הבא/ה' })}
       <p class="muted">אפשר ללכת לשולחן ${flow.next.table} כשהמשחק הנוכחי בבית יסתיים (${live || '—'}). נעדכן אותך כאן אוטומטית.</p>`;
   }
@@ -148,7 +159,7 @@ function flowView(s, flow) {
     const m = flow.active;
     const opp = oppOf(m, me);
     const where = m.stage === 'group' ? `בית ${m.group} · סיבוב ${m.round} מתוך ${roundsOf(m.group)}` : E.koRoundName(s.ko.size, m.round);
-    body = `<div class="big${Date.now() < freshUntil ? ' fresh' : ''}"><small>${esc(where)}</small><div class="t">שולחן ${m.table}</div><div class="vs">מול ${nm(s, opp)}</div></div>
+    body = `<div class="big${Date.now() < freshUntil ? ' fresh' : ''}"><small>${esc(where)}</small><div class="t">שולחן ${m.table}</div><div class="vs">מול ${nm(s, opp)}</div>${colorLine(s, m, me)}</div>
       ${profileCardHtml(s, opp, { title: 'היריב/ה שלך' })}
       <ol class="steps"><li>גש/י לשולחן ${m.table}</li><li>שחק/י נגד ${esc(first(opp))}</li><li>כשהמשחק נגמר, דווח/י כאן על התוצאה</li></ol>
       ${reportHtml(s, flow)}`;
@@ -168,14 +179,17 @@ function meView(s, q) {
   if (!id) return anonymousView(s, q);
   if (s.stage === 'setup') return lobbyView(s);
   const flow = E.playerFlow(s, id);
-  if (!flow) return `<div class="card"><h2>נרשמת, אבל אינך ברשימת המשתתפים</h2><p class="muted">ההגרלה כבר התקיימה. פנה/י למארגנים כדי שיוסיפו אותך.</p></div>`;
+  if (!flow) {
+    const unapproved = mySignup && E.signupStatus(mySignup) !== 'approved';
+    return `<div class="card"><h2>${unapproved ? 'ההרשמה שלך לא אושרה' : 'נרשמת, אבל אינך ברשימת המשתתפים'}</h2><p class="muted">ההגרלה כבר התקיימה${unapproved ? ' וההרשמה שלך לא אושרה בזמן, ולכן אינך משתתף/ת בטורניר' : ''}. פנה/י למארגנים אם זו טעות.</p></div>`;
+  }
   return flowView(s, flow);
 }
 
 // ---------- the other tabs ----------
 
 function tablesView(s, q) {
-  if (s.stage === 'setup') return note(`ההרשמה ${s.settings.registrationOpen ? 'פתוחה' : 'נסגרה'}. נרשמו ${s.signupCount ?? 0} משתתפים.`);
+  if (s.stage === 'setup') return note(`ההרשמה ${s.settings.registrationOpen ? 'פתוחה' : 'נסגרה'}. אושרו ${s.signupCount ?? 0} משתתפים.`);
   if (E.champion(s)) return championHtml(s);
   const ms = E.currentMatches(s);
   if (!ms.length) return note('אין משחקים פעילים כרגע.');

@@ -19,6 +19,10 @@ export const DEFAULT_SETTINGS = {
   pointsMars: 2,
   roundMinutes: 20,
   registrationOpen: true,
+  color1Name: 'לבן',
+  color1Hex: '#f3efe6',
+  color2Name: 'שחור',
+  color2Hex: '#2a2420',
 };
 
 export const LEVELS = { new: 'מתחיל/ת', casual: 'משחק/ת מדי פעם', experienced: 'מנוסה', pro: 'מקצוען/ית' };
@@ -137,10 +141,15 @@ export function addPlayersPatch(s, names) {
   return { patch, added, skipped };
 }
 
-// The signup list (collected on the public page) becomes the player list at draw time.
+// A registration is pending until the organiser approves it, and only approved people are in the draw.
+// (A signup from before approvals existed has no status and counts as approved.)
+export const signupStatus = (x) => x.status ?? 'approved';
+export const approvedSignups = (signups) => signups.filter((x) => signupStatus(x) === 'approved');
+
+// The approved signups (collected on the public page) become the player list at draw time.
 export function playersFromSignups(signups) {
   return Object.fromEntries(
-    signups.map((x) => [x.id, { id: x.id, name: x.name, study: x.study ?? '', level: x.level ?? '', bio: x.bio ?? '', uid: x.uid ?? null }]),
+    approvedSignups(signups).map((x) => [x.id, { id: x.id, name: x.name, study: x.study ?? '', level: x.level ?? '', bio: x.bio ?? '', uid: x.uid ?? null }]),
   );
 }
 
@@ -237,6 +246,34 @@ export function roundRobin(ids) {
   return rounds;
 }
 
+// ---------- checker colours ----------
+// Every match records who plays colour 1 (`c1`); the other player gets colour 2. Colours are shared out
+// fairly: whoever has played colour 1 less often so far gets it, and a coin toss settles a tie.
+
+const bump = (tally, c1, other) => {
+  (tally[c1] ??= { c1: 0, c2: 0 }).c1++;
+  (tally[other] ??= { c1: 0, c2: 0 }).c2++;
+};
+
+function pickColor1(tally, a, b, tossHeads) {
+  const lead = (id) => (tally[id]?.c1 ?? 0) - (tally[id]?.c2 ?? 0);
+  if (lead(a) !== lead(b)) return lead(a) < lead(b) ? a : b;
+  return tossHeads ? a : b;
+}
+
+function colorTally(s) {
+  const tally = {};
+  for (const m of Object.values(s.matches)) if (m.a && m.b && m.c1) bump(tally, m.c1, m.c1 === m.a ? m.b : m.a);
+  return tally;
+}
+
+// { name, hex, first } for one player in one match (older matches without `c1` give colour 1 to `a`).
+export function colorOf(s, m, pid) {
+  const st = { ...DEFAULT_SETTINGS, ...s.settings };
+  const first = (m.c1 ?? m.a) === pid;
+  return first ? { name: st.color1Name, hex: st.color1Hex, first } : { name: st.color2Name, hex: st.color2Hex, first };
+}
+
 export function drawGroups(s, rng = Math.random) {
   const ids = shuffle(Object.keys(s.players), rng);
   const sizes = splitGroups(ids.length, effectiveGroupSize(ids.length, s.settings));
@@ -261,6 +298,13 @@ export function drawGroups(s, rng = Math.random) {
       }),
     );
   });
+  const tally = {};
+  Object.values(matches)
+    .sort((x, y) => x.round - y.round || x.group - y.group || x.table - y.table)
+    .forEach((m) => {
+      m.c1 = pickColor1(tally, m.a, m.b, rng() < 0.5);
+      bump(tally, m.c1, m.c1 === m.a ? m.b : m.a);
+    });
   return { players, groups, matches, stage: 'groups', round: 1, ko: null, 'settings.registrationOpen': false };
 }
 
@@ -459,6 +503,7 @@ function koMakeMatch(s, round, slot, a, b, table) {
   } else {
     const wa = !!s.players[a]?.withdrawn;
     const wb = !!s.players[b]?.withdrawn;
+    m.c1 = pickColor1(colorTally(s), a, b, (round + slot) % 2 === 0);
     if (wa !== wb) m.result = { winner: wa ? b : a, walkover: true, at: Date.now() };
     else m.table = table;
   }

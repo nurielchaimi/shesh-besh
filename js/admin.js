@@ -3,7 +3,7 @@
 // players agree on into final results, starts each group's next round and creates the knockout matches.
 import { openStore } from './store.js';
 import * as E from './engine.js';
-import { esc, nm, standingsHtml, progressHtml, championHtml, caption } from './render.js';
+import { esc, nm, colorDot, standingsHtml, progressHtml, championHtml, caption } from './render.js';
 
 const $ = (sel) => document.querySelector(sel);
 const store = await openStore();
@@ -47,7 +47,8 @@ async function pilot() {
   if (!auto || (store.auth.required && !user) || pilotBusy) return;
   pilotBusy = true;
   try {
-    if (state.stage === 'setup' && (state.signupCount ?? 0) !== signups.length) await store.patch({ signupCount: signups.length });
+    const approvedCount = E.approvedSignups(signups).length;
+    if (state.stage === 'setup' && (state.signupCount ?? 0) !== approvedCount) await store.patch({ signupCount: approvedCount });
     const step = E.autoStep(state, reports);
     if (step.patch) await store.patch(step.patch);
   } catch (err) {
@@ -61,8 +62,11 @@ async function pilot() {
 // ---------- registration and setup ----------
 
 function setupView() {
-  const st = state.settings;
-  const n = signups.length;
+  const st = { ...E.DEFAULT_SETTINGS, ...state.settings };
+  const approved = E.approvedSignups(signups);
+  const pending = signups.filter((x) => E.signupStatus(x) === 'pending');
+  const rejected = signups.filter((x) => E.signupStatus(x) === 'rejected');
+  const n = approved.length;
   const plan = E.planTournament(n, st);
   const alts = E.planAlternatives(n, st).filter((a) => a.koSize);
   const best = E.bestGroupSize(n, st);
@@ -81,15 +85,33 @@ function setupView() {
           )
           .join('')}</tbody></table></div>`;
 
-  const rows = signups
+  const rows = approved
     .map((p) => {
       const tags = [E.LEVELS[p.level], p.study].filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`).join(' ');
       return `<div class="p"><span class="nm">${esc(p.name)} ${tags}${p.uid ? ' <span title="נרשם/ה בעצמו/ה">✓</span>' : ''}</span><span class="row">${p.uid ? `<button class="btn ghost" data-act="release" data-id="${p.id}" title="שחרר את השם כדי שאפשר יהיה לתפוס אותו מטלפון אחר">שחרר</button>` : ''}<button class="btn ghost danger" data-act="rmSignup" data-id="${p.id}" title="הסר">✕</button></span></div>`;
     })
     .join('');
 
+  const tagsOf = (p) => [E.LEVELS[p.level], p.study].filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`).join(' ');
+  const pendingCard = pending.length
+    ? `<div class="card" style="border-color:var(--gold)"><div class="row sp"><h2>ממתינים לאישור (${pending.length})</h2><button class="btn primary" data-act="approveAll">אשר את כולם</button></div>
+    <p class="muted">רק מי שמאושר נכנס להגרלה ולטורניר. מי שנדחה רואה בטלפון שההרשמה לא אושרה.</p>
+    <div class="plist">${pending
+      .map(
+        (p) =>
+          `<div class="p"><span class="nm" style="white-space:normal">${esc(p.name)} ${tagsOf(p)}${p.bio ? `<br><small class="muted">${esc(p.bio)}</small>` : ''}</span><span class="row"><button class="btn primary" data-act="approveSignup" data-id="${p.id}">אשר</button><button class="btn ghost danger" data-act="rejectSignup" data-id="${p.id}">דחה</button></span></div>`,
+      )
+      .join('')}</div></div>`
+    : '';
+  const rejectedCard = rejected.length
+    ? `<details class="card"><summary>נדחו (${rejected.length})</summary><div class="plist" style="margin-top:10px">${rejected
+        .map((p) => `<div class="p out"><span class="nm">${esc(p.name)}</span><span class="row"><button class="btn" data-act="approveSignup" data-id="${p.id}">אשר בכל זאת</button><button class="btn ghost danger" data-act="rmSignup" data-id="${p.id}">✕</button></span></div>`)
+        .join('')}</div></details>`
+    : '';
+
   return `
-  <div class="card"><div class="row sp"><h2>הרשמה · ${n} נרשמו</h2><button class="btn ${open ? 'danger' : 'primary'}" data-act="toggleReg">${open ? 'סגור הרשמה' : 'פתח הרשמה'}</button></div>
+  ${pendingCard}${rejectedCard}
+  <div class="card"><div class="row sp"><h2>הרשמה · ${n} אושרו</h2><button class="btn ${open ? 'danger' : 'primary'}" data-act="toggleReg">${open ? 'סגור הרשמה' : 'פתח הרשמה'}</button></div>
     <p>קישור להרשמה ולמעקב (לשתף בקבוצה, וגם ב-QR על המסך): <br><b dir="ltr">${esc(link)}</b> <button class="btn" data-act="copy" data-v="${esc(link)}">העתק</button></p>
     <p class="muted">${open ? 'ההרשמה פתוחה: כל מי שנכנס לקישור יכול להירשם.' : 'ההרשמה סגורה.'} ההגרלה סוגרת אותה אוטומטית.</p>
     <div class="field"><label>להוסיף נרשמים ידנית (שם בכל שורה). הם יוכלו לתפוס את השם שלהם מהטלפון</label><textarea id="names" placeholder="נועה כהן&#10;יוסי לוי"></textarea></div>
@@ -102,6 +124,10 @@ function setupView() {
     ${field('pointsWin', 'נקודות לניצחון', 'type="number" min="1" max="9"')}
     ${field('pointsMars', 'נקודות למארס', 'type="number" min="1" max="9"')}
     ${field('roundMinutes', 'דקות לסיבוב (להערכה)', 'type="number" min="5" max="180"')}
+    ${field('color1Name', 'צבע דמקות ראשון (שם)')}
+    ${field('color1Hex', 'הגוון שלו', 'type="color"')}
+    ${field('color2Name', 'צבע דמקות שני (שם)')}
+    ${field('color2Hex', 'הגוון שלו', 'type="color"')}
   </div></div>
   <div class="card"><h2>תוכנית ויציאה לדרך</h2>${planBlock}
     <button class="btn primary big" data-act="draw" ${n < 4 ? 'disabled' : ''}>סגור הרשמה, הגרל והתחל</button>
@@ -120,7 +146,7 @@ function entryHtml(m) {
     if (id == null) return '<div class="prow"><span class="nm muted">פטור</span></div>';
     if (r?.bye) return `<div class="prow"><span class="nm">${nm(state, id)}</span><span class="tag">עולה (פטור)</span></div>`;
     const won = r?.winner === id;
-    return `<div class="prow"><span class="nm">${nm(state, id)}</span>
+    return `<div class="prow"><span class="nm">${colorDot(state, m, id)}${nm(state, id)}</span>
       <button class="btn${won && !r.mars && !r.walkover ? ' on' : ''}" data-act="win" data-m="${m.id}" data-w="${id}">ניצח</button>
       ${ko ? '' : `<button class="btn mars${won && r.mars && !r.walkover ? ' on' : ''}" data-act="mars" data-m="${m.id}" data-w="${id}">מארס ×2</button>`}
       <button class="btn ghost${won && r.walkover ? ' on' : ''}" data-act="wo" data-m="${m.id}" data-w="${id}" title="ניצחון טכני: היריב לא הגיע">טכני</button></div>`;
@@ -250,10 +276,11 @@ function render() {
     return;
   }
   const s = state;
+  const pendingCount = signups.filter((x) => E.signupStatus(x) === 'pending').length;
   const attention = E.currentMatches(s).filter((m) => ['disputed', 'pending'].includes(E.reportStatus(m, reports).status)).length;
   const tabs =
     s.stage === 'setup'
-      ? [['setup', 'הרשמה והגדרות'], ['tools', 'כלים']]
+      ? [['setup', `הרשמה והגדרות${pendingCount ? ` (${pendingCount})` : ''}`], ['tools', 'כלים']]
       : [['live', `חי${attention ? ` (${attention})` : ''}`], ['all', 'כל המשחקים'], ['standings', 'דירוג בתים'], ['players', 'שחקנים'], ['tools', 'כלים']];
   if (!tabs.some(([id]) => id === tab)) tab = tabs[0][0];
   const y = window.scrollY;
@@ -367,14 +394,25 @@ const actions = {
       const have = new Set(signups.map((x) => x.name));
       await Promise.all(E.demoSignups(Number(d.n)).filter((p) => !have.has(p.name)).map((p) => store.signups.add(p)));
     }),
+  approveSignup: (d) => run(() => store.signups.setStatus(d.id, 'approved')),
+  rejectSignup: (d) => run(() => store.signups.setStatus(d.id, 'rejected')),
+  approveAll: () =>
+    run(async () => {
+      const waiting = signups.filter((x) => E.signupStatus(x) === 'pending');
+      await Promise.all(waiting.map((p) => store.signups.setStatus(p.id, 'approved')));
+      flash = `אושרו ${waiting.length} נרשמים`;
+    }),
   rmSignup: (d) => run(() => store.signups.remove(d.id)),
   release: (d) => confirm('לשחרר את השם? מי שתפס אותו יצטרך לתפוס אותו שוב.') && run(() => store.signups.release(d.id), 'השם שוחרר'),
   draw: () => {
-    const plan = E.planTournament(signups.length, state.settings);
-    if (!confirm(`להגריל ${signups.length} שחקנים ל-${plan.sizes.length} בתים, לסגור את ההרשמה ולהתחיל?`)) return;
+    const count = E.approvedSignups(signups).length;
+    const waiting = signups.filter((x) => E.signupStatus(x) === 'pending').length;
+    const plan = E.planTournament(count, state.settings);
+    const warn = waiting ? `\n\nשים לב: ${waiting} נרשמים עדיין ממתינים לאישור ולא ייכללו.` : '';
+    if (!confirm(`להגריל ${count} שחקנים ל-${plan.sizes.length} בתים, לסגור את ההרשמה ולהתחיל?${warn}`)) return;
     return run(async () => {
       const base = E.applyPatch(state, { players: E.playersFromSignups(signups) });
-      await store.patch({ ...E.drawGroups(base), signupCount: signups.length });
+      await store.patch({ ...E.drawGroups(base), signupCount: count });
       tab = 'live';
     });
   },
