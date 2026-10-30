@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The organiser: the one account you create in Firebase Authentication with email and password.
+    // Replace the address below with that email. Players are anonymous users and never match this.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'ORGANISER@example.com';
+    }
+    function tournament() {
+      return get(/databases/$(database)/documents/tournaments/main).data;
+    }
+
+    // The tournament itself: everyone can watch, only the organiser writes.
+    match /tournaments/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Registrations. A player creates one for themselves while registration is open, can later fix their own
+    // profile, and can claim a name the organiser typed in (only while nobody has claimed it yet).
+    match /signups/{id} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && tournament().settings.registrationOpen == true
+        && request.resource.data.keys().hasOnly(['name', 'study', 'level', 'bio', 'uid', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 40
+        && request.resource.data.study is string && request.resource.data.study.size() <= 40
+        && request.resource.data.bio is string && request.resource.data.bio.size() <= 90
+        || isAdmin();
+      allow update: if isAdmin()
+        || (request.auth != null && resource.data.uid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'study', 'level', 'bio']))
+        || (request.auth != null && resource.data.uid == null && request.resource.data.uid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid']));
+      allow delete: if isAdmin();
+    }
+
+    // Result reports, one document per player per match, id = "<matchId>_<playerId>".
+    // A player may only report on a match they are playing, as themselves, until the result is final.
+    match /reports/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        || (request.auth != null
+            && request.resource.data.keys().hasOnly(['m', 'p', 'winner', 'mars', 'at'])
+            && id == request.resource.data.m + '_' + request.resource.data.p
+            && get(/databases/$(database)/documents/signups/$(request.resource.data.p)).data.uid == request.auth.uid
+            && request.resource.data.mars is bool
+            && request.resource.data.winner in [tournament().matches[request.resource.data.m].a, tournament().matches[request.resource.data.m].b]
+            && request.resource.data.p in [tournament().matches[request.resource.data.m].a, tournament().matches[request.resource.data.m].b]
+            && !('result' in tournament().matches[request.resource.data.m]));
+      allow delete: if isAdmin()
+        || (request.auth != null
+            && get(/databases/$(database)/documents/signups/$(resource.data.p)).data.uid == request.auth.uid);
+    }
+  }
+}
