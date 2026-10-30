@@ -5,7 +5,7 @@ service cloud.firestore {
     // The organiser: the one account you create in Firebase Authentication with email and password.
     // Replace the address below with that email. Players are anonymous users and never match this.
     function isAdmin() {
-      return request.auth != null && request.auth.token.email == 'ORGANISER@example.com';
+      return request.auth != null && request.auth.token.get('email', '') == 'ORGANISER@example.com';
     }
     function tournament() {
       return get(/databases/$(database)/documents/tournaments/main).data;
